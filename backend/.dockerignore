@@ -1,0 +1,9 @@
+.env
+__pycache__
+*.pyc
+*.pyo
+.pytest_cache
+.git
+.gitignore
+README.md
+*node_modules

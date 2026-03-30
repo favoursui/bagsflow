@@ -1,0 +1,35 @@
+version: "3.9"
+
+services:
+
+  # Python FastAPI Backend
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: bagsflow-backend
+    ports:
+      - "8000:8000"
+    env_file:
+      - ./backend/.env        
+    volumes:
+      - ./backend:/app        # hot reload
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Static Frontend (Nginx)
+  frontend:
+    image: nginx:alpine
+    container_name: bagsflow-frontend
+    ports:
+      - "5500:80"
+    volumes:
+      - ./frontend/build:/usr/share/nginx/html:ro
+      - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on:
+      - backend
+    restart: unless-stopped
