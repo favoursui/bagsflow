@@ -1,23 +1,3 @@
-"""
-bitquery.py — Real-time Solana trade stream via Bitquery EAP WebSocket.
-
-Subscribes to DEX trades on Solana, normalises each trade into the
-BAGS//FLOW wire format, and broadcasts to all connected WS clients.
-
-Wire format (sent to frontend):
-{
-  "type":   "trade",
-  "id":     "<unique str>",
-  "token":  "<symbol or short mint>",
-  "mint":   "<full mint address>",
-  "side":   "BUY" | "SELL",
-  "amount": <float USD>,
-  "wallet": "<trader address>",
-  "tx":     "<signature>",
-  "time":   "<ISO-8601 UTC>"
-}
-"""
-
 import asyncio
 import json
 import time
@@ -30,7 +10,7 @@ import websockets
 from app.core.config import BITQUERY_API_KEY, BITQUERY_WS_URL, WHALE_THRESHOLD_USD
 from app.core.websocket import manager
 
-# ── GraphQL subscription ──────────────────────────────────────────────────────
+# GraphQL subscription
 # Streams all Solana DEX trades in real-time from Bitquery EAP endpoint.
 SUBSCRIPTION = """
 subscription {
