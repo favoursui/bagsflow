@@ -24,15 +24,22 @@ async def get_quote(
     slippageBps:  int = Query(50),
 ):
     try:
-        return await bags.get_quote(
+        quote_data = await bags.get_quote(
             input_mint    = inputMint,
             output_mint   = outputMint,
             amount        = amount,
             slippage_mode = slippageMode,
             slippage_bps  = slippageBps,
         )
+        return {
+            "success": True,
+            "response": quote_data
+        }
     except Exception as e:
-        raise HTTPException(status_code=502, detail=str(e))
+        return {
+            "success": False,
+            "error": str(e)
+        }
 
 
 @router.post("/swap")

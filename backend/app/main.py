@@ -6,57 +6,99 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.core.config import FRONTEND_ORIGIN
 from app.core.websocket import manager
 from app.services.bitquery import start_trade_stream
+from app.services.bags import get_token_launches
 from app.api.routes import register_routes
 
 
+# ── Launch poller ─────────────────────────────────────────────────────────────
+async def poll_launches(interval: int = 30):
+    """
+    Polls the Bags token launch feed every `interval` seconds and broadcasts
+    any new launches to connected WebSocket clients.
+    """
+    seen: set[str] = set()
+    print("🚀 Launch poller started")
+    while True:
+        try:
+            data    = await get_token_launches(limit=20)
+            launches = data.get("response", []) if data.get("success") else []
+            for launch in launches:
+                # Use tokenMint as unique ID
+                mint = launch.get("tokenMint") or launch.get("mint") or launch.get("address")
+                if not mint or mint in seen:
+                    continue
+                seen.add(mint)
+                await manager.broadcast({
+                    "type":   "launch",
+                    "name":   launch.get("symbol") or launch.get("name") or mint[:6],
+                    "mint":   mint,
+                    "price":  launch.get("priceUsd") or launch.get("price") or 0,
+                    "mcap":   launch.get("marketCapUsd") or launch.get("marketCap") or 0,
+                    "time":   launch.get("createdAt") or launch.get("time") or "",
+                })
+        except asyncio.CancelledError:
+            print("🚀 Launch poller cancelled")
+            raise
+        except Exception as e:
+            print(f"⚠️  Launch poller error: {e}")
+
+        await asyncio.sleep(interval)
+
+
+# ── App lifespan ──────────────────────────────────────────────────────────────
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     print("BAGS//FLOW backend starting…")
-    stream_task = asyncio.create_task(start_trade_stream())
+    stream_task  = asyncio.create_task(start_trade_stream())
+    launch_task  = asyncio.create_task(poll_launches(interval=30))
     yield
     stream_task.cancel()
-    print("Backend shutting down")
+    launch_task.cancel()
+    await asyncio.gather(stream_task, launch_task, return_exceptions=True)
+    print("Backend shut down")
 
 
 app = FastAPI(
     title       = "BAGS//FLOW API",
-    description = "On-Chain Order Flow Dashboard",
+    description = "On-Chain Order Flow Dashboard — built on Bags.fm",
     version     = "1.0.0",
     lifespan    = lifespan,
 )
 
-# ── CORS ──
+# ── CORS ──────────────────────────────────────────────────────────────────────
 app.add_middleware(
     CORSMiddleware,
-    allow_origins     = [
+    allow_origins = [
         FRONTEND_ORIGIN,
         "http://localhost:5500",
         "http://127.0.0.1:5500",
+        "http://localhost:3000",
     ],
     allow_credentials = True,
     allow_methods     = ["*"],
     allow_headers     = ["*"],
 )
 
-# ── Routes ──
+# ── Routes ────────────────────────────────────────────────────────────────────
 register_routes(app)
 
 
-# ── WebSocket ──
+# ── WebSocket ─────────────────────────────────────────────────────────────────
 @app.websocket("/ws")
 async def websocket_endpoint(ws: WebSocket):
     await manager.connect(ws)
     try:
         while True:
-            await ws.receive_text()
+            await ws.receive_text()   # keep-alive; client can send pings
     except WebSocketDisconnect:
         manager.disconnect(ws)
 
 
-# ── Health ──
+# ── Health ────────────────────────────────────────────────────────────────────
 @app.get("/health")
 async def health():
     return {
         "status":  "ok",
         "clients": len(manager.active),
+        "stream":  "live" if manager._stream_ok else "connecting",
     }

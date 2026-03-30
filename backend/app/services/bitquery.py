@@ -1,106 +1,192 @@
-import httpx
+"""
+bitquery.py — Real-time Solana trade stream via Bitquery EAP WebSocket.
+
+Subscribes to DEX trades on Solana, normalises each trade into the
+BAGS//FLOW wire format, and broadcasts to all connected WS clients.
+
+Wire format (sent to frontend):
+{
+  "type":   "trade",
+  "id":     "<unique str>",
+  "token":  "<symbol or short mint>",
+  "mint":   "<full mint address>",
+  "side":   "BUY" | "SELL",
+  "amount": <float USD>,
+  "wallet": "<trader address>",
+  "tx":     "<signature>",
+  "time":   "<ISO-8601 UTC>"
+}
+"""
+
 import asyncio
-from app.core.config import BAGS_BASE_URL, BAGS_API_KEY
+import json
+import time
+import traceback
+from datetime import datetime, timezone
+
+import httpx
+import websockets
+
+from app.core.config import BITQUERY_API_KEY, BITQUERY_WS_URL, WHALE_THRESHOLD_USD
 from app.core.websocket import manager
 
-HEADERS = {
-    "x-api-key":    BAGS_API_KEY,
-    "Content-Type": "application/json",
+# ── GraphQL subscription ──────────────────────────────────────────────────────
+# Streams all Solana DEX trades in real-time from Bitquery EAP endpoint.
+SUBSCRIPTION = """
+subscription {
+  Solana {
+    DEXTradeByTokens(
+      where: {
+        Trade: { Currency: { MintAddress: { not: "11111111111111111111111111111111" } } }
+        Transaction: { Result: { Success: true } }
+      }
+    ) {
+      Transaction { Signature }
+      Trade {
+        Dex { ProtocolName }
+        Side
+        Amount
+        AmountInUSD
+        Currency {
+          Symbol
+          MintAddress
+          Decimals
+        }
+        Price
+        PriceInUSD
+        Account { Address }
+      }
+      Block { Time }
+    }
+  }
 }
+"""
+
+# ── Symbol cache (mint → symbol) to avoid repeated lookups ───────────────────
+_symbol_cache: dict[str, str] = {}
+
+RECONNECT_DELAY   = 5    # seconds before reconnect on error
+MAX_RECONNECT     = 30   # max seconds between reconnect attempts
+
+
+def _short_mint(mint: str) -> str:
+    return f"{mint[:4]}…{mint[-4:]}" if len(mint) > 10 else mint
+
+
+def _normalise(raw: dict) -> dict | None:
+    """Convert a Bitquery DEXTradeByTokens record to BAGS//FLOW wire format."""
+    try:
+        trade    = raw["Trade"]
+        tx_sig   = raw["Transaction"]["Signature"]
+        block_t  = raw["Block"]["Time"]
+
+        currency  = trade["Currency"]
+        mint      = currency["MintAddress"]
+        symbol    = currency.get("Symbol") or _short_mint(mint)
+        decimals  = int(currency.get("Decimals", 9))
+
+        amount_usd = float(trade.get("AmountInUSD") or 0)
+        side_raw   = str(trade.get("Side", "")).upper()
+        # Bitquery returns "buy" side as the currency being bought
+        side       = "BUY" if "BUY" in side_raw else "SELL"
+        wallet     = trade.get("Account", {}).get("Address", "unknown")
+
+        # Cache symbol
+        if mint not in _symbol_cache:
+            _symbol_cache[mint] = symbol
+
+        return {
+            "type":   "trade",
+            "id":     f"{tx_sig[:16]}-{int(time.time()*1000)}",
+            "token":  symbol,
+            "mint":   mint,
+            "decimals": decimals,
+            "side":   side,
+            "amount": round(amount_usd, 2),
+            "wallet": wallet,
+            "tx":     tx_sig,
+            "time":   block_t or datetime.now(timezone.utc).isoformat(),
+            "whale":  amount_usd >= WHALE_THRESHOLD_USD,
+        }
+    except Exception:
+        return None
+
+
+async def _stream_once():
+    """Open one WebSocket session to Bitquery and stream trades until closed."""
+    headers = {
+        "Authorization": f"Bearer {BITQUERY_API_KEY}",
+        "Content-Type":  "application/json",
+    }
+
+    print("📡 Connecting to Bitquery stream…")
+    async with websockets.connect(
+        BITQUERY_WS_URL,
+        additional_headers=headers,
+        subprotocols=["graphql-ws"],
+        ping_interval=20,
+        ping_timeout=10,
+    ) as ws:
+        # graphql-ws handshake
+        await ws.send(json.dumps({"type": "connection_init"}))
+
+        ack = json.loads(await ws.recv())
+        if ack.get("type") != "connection_ack":
+            raise RuntimeError(f"Expected connection_ack, got: {ack}")
+
+        print("✅ Bitquery stream connected")
+        manager.set_stream_status(True)
+        await manager.broadcast({"type": "status", "stream": "live"})
+
+        # Start subscription
+        await ws.send(json.dumps({
+            "id":      "bags_trades",
+            "type":    "subscribe",
+            "payload": {"query": SUBSCRIPTION},
+        }))
+
+        async for raw_msg in ws:
+            msg = json.loads(raw_msg)
+
+            if msg.get("type") == "next":
+                records = (
+                    msg.get("payload", {})
+                       .get("data", {})
+                       .get("Solana", {})
+                       .get("DEXTradeByTokens", [])
+                )
+                for record in records:
+                    trade = _normalise(record)
+                    if trade:
+                        await manager.broadcast(trade)
+
+            elif msg.get("type") == "error":
+                print(f"⚠️  Bitquery subscription error: {msg.get('payload')}")
+
+            elif msg.get("type") == "complete":
+                print("📡 Bitquery subscription completed")
+                break
 
 
 async def start_trade_stream():
-    """Stream real-time trade data to connected WebSocket clients.
-    
-    TODO: Implement actual trade streaming from Bags API.
-    This should connect to Bags WebSocket or poll for trades
-    and broadcast to WebSocket clients via manager.
     """
-    print("📡 Trade stream started")
-    try:
-        while True:
-            # Placeholder: implement actual trade data fetching here
-            await asyncio.sleep(10)  # Prevent busy loop
-            # Example: await manager.broadcast({"trade": data})
-    except asyncio.CancelledError:
-        print("📡 Trade stream stopped")
-        raise
-
-
-async def get_quote(
-    input_mint:    str,
-    output_mint:   str,
-    amount:        int,
-    slippage_mode: str = "auto",
-    slippage_bps:  int = 50,
-) -> dict:
-    params = {
-        "inputMint":    input_mint,
-        "outputMint":   output_mint,
-        "amount":       amount,
-        "slippageMode": slippage_mode,
-    }
-    if slippage_mode == "manual":
-        params["slippageBps"] = slippage_bps
-
-    async with httpx.AsyncClient(timeout=10) as client:
-        res = await client.get(
-            f"{BAGS_BASE_URL}/trade/quote",
-            headers=HEADERS,
-            params=params,
-        )
-        res.raise_for_status()
-        return res.json()
-
-
-async def create_swap_transaction(quote_response: dict, user_public_key: str) -> dict:
-    """Build a swap transaction from a quote."""
-    async with httpx.AsyncClient(timeout=10) as client:
-        res = await client.post(
-            f"{BAGS_BASE_URL}/trade/swap",
-            headers=HEADERS,
-            json={
-                "quoteResponse":  quote_response,
-                "userPublicKey":  user_public_key,
-            },
-        )
-        res.raise_for_status()
-        return res.json()
-
-
-async def send_transaction(transaction: str, last_valid_block_height: int) -> dict:
-    """Submit a signed transaction to Solana via Bags API."""
-    async with httpx.AsyncClient(timeout=20) as client:
-        res = await client.post(
-            f"{BAGS_BASE_URL}/transaction/send",
-            headers=HEADERS,
-            json={
-                "transaction":          transaction,
-                "lastValidBlockHeight": last_valid_block_height,
-            },
-        )
-        res.raise_for_status()
-        return res.json()
-
-
-async def get_token_launches(limit: int = 20) -> dict:
-    """Fetch recent token launches from Bags."""
-    async with httpx.AsyncClient(timeout=10) as client:
-        res = await client.get(
-            f"{BAGS_BASE_URL}/token/launches",
-            headers=HEADERS,
-            params={"limit": limit},
-        )
-        res.raise_for_status()
-        return res.json()
-
-
-async def get_bags_pools() -> dict:
-    """Fetch all active Bags liquidity pools."""
-    async with httpx.AsyncClient(timeout=10) as client:
-        res = await client.get(
-            f"{BAGS_BASE_URL}/pools",
-            headers=HEADERS,
-        )
-        res.raise_for_status()
-        return res.json()
+    Persistent loop: connects to Bitquery, streams trades, reconnects on failure.
+    Runs as a background task from app lifespan.
+    """
+    delay = RECONNECT_DELAY
+    while True:
+        try:
+            await _stream_once()
+        except asyncio.CancelledError:
+            print("📡 Trade stream cancelled — shutting down")
+            manager.set_stream_status(False)
+            raise
+        except Exception as e:
+            manager.set_stream_status(False)
+            await manager.broadcast({"type": "status", "stream": "reconnecting"})
+            print(f"⚠️  Trade stream error: {e} — reconnecting in {delay}s")
+            traceback.print_exc()
+            await asyncio.sleep(delay)
+            delay = min(delay * 2, MAX_RECONNECT)
+        else:
+            delay = RECONNECT_DELAY

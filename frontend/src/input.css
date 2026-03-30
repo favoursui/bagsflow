@@ -545,3 +545,111 @@ body {
   letter-spacing: 0.08em;
 }
 
+
+/* ── Responsive breakpoints ─────────────────────────────────────────── */
+
+/* Tablet: collapse 2-col main grid to single column */
+@media (max-width: 1024px) {
+  #main-grid {
+    grid-template-columns: 1fr;
+  }
+
+  #left-col {
+    grid-row: auto;
+  }
+
+  #feed-card   { height: 360px; }
+  #whale-card  { height: 200px; }
+  #chart-card  { height: 220px; }
+
+  #bottom-row {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+/* Mobile: single column everything */
+@media (max-width: 640px) {
+  #app-header {
+    padding: 8px 12px;
+    gap: 8px;
+  }
+
+  .stat-pill:nth-child(n+3) {
+    display: none;
+  }
+
+  #main-grid {
+    padding: 10px;
+    gap: 10px;
+    grid-template-columns: 1fr;
+  }
+
+  #bottom-row {
+    padding: 0 10px 10px;
+    gap: 10px;
+    grid-template-columns: 1fr;
+  }
+
+  #feed-card   { height: 300px; }
+  #whale-card  { height: 180px; }
+  #chart-card  { height: 200px; }
+  #lb-card     { height: 240px; }
+  #launch-card { height: 240px; }
+
+  #swap-panel {
+    width: 100vw;
+    right: -100vw;
+  }
+
+  .col-labels,
+  .feed-row {
+    grid-template-columns: 55px 45px 80px 1fr 60px;
+    font-size: 10px;
+    padding: 5px 10px;
+  }
+
+  .lb-labels,
+  .lb-row {
+    grid-template-columns: 28px 1fr 85px 55px;
+    padding: 6px 10px;
+  }
+
+  .launch-labels,
+  .launch-row {
+    grid-template-columns: 1fr 80px 80px 65px;
+    padding: 6px 10px;
+  }
+
+  .card-header {
+    padding: 8px 10px;
+  }
+
+  #app-footer {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 12px;
+  }
+
+  .footer-right {
+    align-items: flex-start;
+  }
+}
+
+/* Very small phones */
+@media (max-width: 380px) {
+  .col-labels span:last-child,
+  .feed-row span:last-child {
+    display: none;
+  }
+
+  .col-labels,
+  .feed-row {
+    grid-template-columns: 50px 40px 70px 1fr;
+  }
+}
+
+
+
+
+
