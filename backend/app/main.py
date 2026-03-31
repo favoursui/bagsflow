@@ -10,7 +10,7 @@ from app.services.bags import get_token_launches
 from app.api.routes import register_routes
 
 
-# ── Launch poller ─────────────────────────────────────────────────────────────
+# Launch poller 
 async def poll_launches(interval: int = 30):
     """
     Polls the Bags token launch feed every `interval` seconds and broadcasts
@@ -23,18 +23,20 @@ async def poll_launches(interval: int = 30):
             data    = await get_token_launches(limit=20)
             launches = data.get("response", []) if data.get("success") else []
             for launch in launches:
-                # Use tokenMint as unique ID
-                mint = launch.get("tokenMint") or launch.get("mint") or launch.get("address")
+                mint = launch.get("tokenMint")
                 if not mint or mint in seen:
                     continue
                 seen.add(mint)
                 await manager.broadcast({
-                    "type":   "launch",
-                    "name":   launch.get("symbol") or launch.get("name") or mint[:6],
-                    "mint":   mint,
-                    "price":  launch.get("priceUsd") or launch.get("price") or 0,
-                    "mcap":   launch.get("marketCapUsd") or launch.get("marketCap") or 0,
-                    "time":   launch.get("createdAt") or launch.get("time") or "",
+                    "type":    "launch",
+                    "name":    launch.get("name")   or mint[:6],
+                    "symbol":  launch.get("symbol") or "???",
+                    "mint":    mint,
+                    "status":  launch.get("status") or "",
+                    "image":   launch.get("image")  or "",
+                    "twitter": launch.get("twitter") or "",
+                    "website": launch.get("website") or "",
+                    "time":    "",
                 })
         except asyncio.CancelledError:
             print("🚀 Launch poller cancelled")
@@ -45,7 +47,7 @@ async def poll_launches(interval: int = 30):
         await asyncio.sleep(interval)
 
 
-# ── App lifespan ──────────────────────────────────────────────────────────────
+# App lifespan 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     print("BAGS//FLOW backend starting…")
@@ -65,7 +67,7 @@ app = FastAPI(
     lifespan    = lifespan,
 )
 
-# ── CORS ──────────────────────────────────────────────────────────────────────
+# CORS 
 app.add_middleware(
     CORSMiddleware,
     allow_origins = [
@@ -79,11 +81,11 @@ app.add_middleware(
     allow_headers     = ["*"],
 )
 
-# ── Routes ────────────────────────────────────────────────────────────────────
+# Routes 
 register_routes(app)
 
 
-# ── WebSocket ─────────────────────────────────────────────────────────────────
+# WebSocket 
 @app.websocket("/ws")
 async def websocket_endpoint(ws: WebSocket):
     await manager.connect(ws)
@@ -94,7 +96,7 @@ async def websocket_endpoint(ws: WebSocket):
         manager.disconnect(ws)
 
 
-# ── Health ────────────────────────────────────────────────────────────────────
+# Health 
 @app.get("/health")
 async def health():
     return {

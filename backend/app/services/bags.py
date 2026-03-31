@@ -7,7 +7,7 @@ HEADERS = {
 }
 
 
-# ── Quote & Swap ──────────────────────────────────────────────────────────────
+# Quote & Swap
 
 async def get_quote(
     input_mint:    str,
@@ -66,18 +66,21 @@ async def send_transaction(transaction: str, last_valid_block_height: int) -> di
         return res.json()
 
 
-# ── Token & Pool ──────────────────────────────────────────────────────────────
+# Token & Pool
 
 async def get_token_launches(limit: int = 20) -> dict:
     """Fetch recent token launches from Bags."""
     async with httpx.AsyncClient(timeout=10) as client:
         res = await client.get(
-            f"{BAGS_BASE_URL}/token/launch/feed",
+            f"{BAGS_BASE_URL}/token-launch/feed",
             headers=HEADERS,
-            params={"limit": limit},
         )
         res.raise_for_status()
-        return res.json()
+        data = res.json()
+        # API doesn't support limit param — trim here
+        if data.get("success") and isinstance(data.get("response"), list):
+            data["response"] = data["response"][:limit]
+        return data
 
 
 async def get_bags_pools() -> dict:
@@ -174,7 +177,7 @@ async def get_quote_for_mint(
     )
 
 
-# ── Analytics ─────────────────────────────────────────────────────────────────
+# Analytics
 
 async def get_token_lifetime_fees(mint: str) -> dict:
     """Fetch lifetime fee stats for a token."""
