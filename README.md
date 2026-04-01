@@ -42,7 +42,7 @@ It also includes a fully functional *in-app swap panel* powered by the Bags API,
 
 # Architecture
 
-
+```
 Browser
   │
   ├── GET /api/*  ──────────────────► FastAPI ──► Bags.fm API
@@ -53,7 +53,7 @@ Browser
                                (logsSubscribe on
                                 Meteora DBC + Bags
                                 program addresses)
-
+```
 
 Nginx sits in front of everything, serving the static frontend and proxies `/api/` and `/ws` to the FastAPI backend. No CORS issues, single origin.
 
@@ -108,7 +108,7 @@ Open **http://localhost:5500** in your browser.
 
 # Project Structure
 
-
+```
 bags//flow/
 ├── backend/
 │   ├── app/
@@ -134,5 +134,5 @@ bags//flow/
 │           └── swap.js        # Wallet connect + swap UI
 ├── nginx.conf
 └── docker-compose.yaml
-
+```
 
