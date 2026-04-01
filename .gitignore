@@ -10,7 +10,6 @@ __pycache__/
 .Python
 *.egg-info/
 dist/
-build/
 .eggs/
 .pytest_cache/
 .mypy_cache/
@@ -26,7 +25,6 @@ yarn-debug.log*
 yarn-error.log*
 
 
-frontend/build/css/style.css
 
 .DS_Store
 Thumbs.db

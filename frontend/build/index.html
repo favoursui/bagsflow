@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="BAGS//FLOW — Real-time on-chain order flow dashboard built on Bags.fm" />
+  <meta property="og:title" content="BAGS//FLOW" />
+  <meta property="og:description" content="Real-time on-chain order flow dashboard built on Bags.fm" />
+  <meta property="og:type" content="website" />
+  <meta name="twitter:card" content="summary" />
+  <meta name="twitter:title" content="BAGS//FLOW" />
+  <meta name="twitter:description" content="Real-time on-chain order flow dashboard built on Bags.fm" />
+  <title>BAGS-On-Chain Order Dashboard</title>
+  <link rel="stylesheet" href="./css/style.css" />
+  
+</head>
+<body>
+
+  <header id="app-header">
+    <!-- Brand -->
+    <div style="display:flex; align-items:center; gap:10px;">
+      <div class="live-dot" style="width:8px;height:8px;border-radius:50%;background:var(--green);flex-shrink:0;"></div>
+      <span class="glow-cyan" style="font-family:var(--font-mono);font-size:15px;color:var(--cyan);letter-spacing:0.2em;font-weight:600;">BAGS//FLOW</span>
+      <span style="font-family:var(--font-mono);font-size:10px;padding:2px 8px;border-radius:4px;background:rgba(0,230,118,0.1);color:var(--green);border:1px solid rgba(0,230,118,0.25);letter-spacing:0.1em;">LIVE</span>
+    </div>
+
+    <!-- Stats -->
+    <div style="display:flex;gap:8px;flex-wrap:wrap;">
+      <div class="stat-pill"><span class="lbl">24H VOL</span><span class="val" id="stat-vol">$0</span></div>
+      <div class="stat-pill"><span class="lbl">TRADES</span><span class="val" id="stat-trades">0</span></div>
+      <div class="stat-pill"><span class="lbl">WHALES</span><span class="val" id="stat-whales">0</span></div>
+      <div class="stat-pill"><span class="lbl">BUY/SELL</span><span class="val" id="stat-ratio">0/0</span></div>
+    </div>
+
+    <!-- Clock -->
+    <div class="flex items-center gap-8">
+        <div id="clock" style="font-family:var(--font-mono);font-size:11px;color:var(--muted);">--:--:--</div>
+
+        <button id="wallet-header-btn" onclick="toggleSwapPanel()" class="wallet-header-btn">
+            Connect Wallet
+        </button>
+    </div>     
+
+  </header>
+
+  <div id="main-grid">
+
+    <!-- LEFT COL -->
+    <div id="left-col">
+      <!-- Live Feed -->
+      <div class="card" id="feed-card">
+        <div class="card-header">
+          <span class="title">⬡ Live Trade Feed</span>
+          <span id="feed-count" style="font-family:var(--font-mono);">0 trades</span>
+        </div>
+        <div class="col-labels">
+          <span>TOKEN</span><span>SIDE</span><span>AMOUNT</span><span>WALLET</span><span>TIME</span>
+        </div>
+        <div class="feed-scroll" id="feed-list"></div>
+      </div>
+    </div>
+
+    <!-- RIGHT COL -->
+    <div id="right-col">
+      <!-- Whale Alerts -->
+      <div class="card" id="whale-card">
+        <div class="card-header">
+          <span class="title">🐋 Whale Alerts</span>
+          <span style="font-family:var(--font-mono);color:var(--gold);">≥ $500</span>
+        </div>
+        <div class="whale-scroll" id="whale-list"></div>
+      </div>
+
+      <!-- Net Flow Chart -->
+      <div class="card" id="chart-card">
+        <div class="card-header">
+          <span class="title">◈ Net Order Flow</span>
+          <span style="font-family:var(--font-mono);">buy vs sell pressure</span>
+        </div>
+        <div style="padding:10px 14px;flex:1;min-height:0;">
+          <canvas id="flow-chart"></canvas>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <div id="bottom-row">
+
+    <!-- Top Traders Leaderboard -->
+    <div class="card" id="lb-card">
+      <div class="card-header">
+        <span class="title">◎ Top Traders</span>
+        <span style="font-family:var(--font-mono);">by volume</span>
+      </div>
+      <div class="lb-labels">
+        <span>#</span><span>WALLET</span><span>VOLUME</span><span>TRADES</span>
+      </div>
+      <div class="lb-scroll" id="lb-list"></div>
+    </div>
+
+    <!-- New Token Launches -->
+    <div class="card" id="launch-card">
+      <div class="card-header">
+        <span class="title">⚡ New Token Launches</span>
+        <span style="font-family:var(--font-mono);">recent mints</span>
+      </div>
+      <div class="launch-labels">
+        <span>TOKEN</span><span>STATUS</span><span>MINT</span><span>TIME</span>
+      </div>
+      <div class="launch-scroll" id="launch-list"></div>
+    </div>
+
+  </div>
+    <div id="swap-overlay" onclick="toggleSwapPanel()" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.4);z-index:40;backdrop-filter:blur(2px);"></div>
+    
+        <!-- Swap Panel -->
+        <div id="swap-panel">
+        <div class="swap-panel-header">
+            <span class="title">⇄ Swap Tokens</span>
+            <button onclick="toggleSwapPanel()" class="btn-ghost-sm" style="font-size:16px;padding:0 6px;">✕</button>
+        </div>
+        
+        <!-- Wallet Connection Area -->
+        <div style="padding:16px;">
+            <div id="wallet-connect-area">
+            <!-- Rendered by swap.js -->
+            </div>
+        </div>
+        
+        <div style="border-top:1px solid var(--border);"></div>
+        
+        <!-- Swap Form (shown after wallet connect) -->
+        <div id="swap-form" style="display:none;flex-direction:column;gap:0;padding:16px;gap:12px;">
+        
+            <!-- Token CA -->
+            <div class="swap-field">
+            <label class="swap-label">Token Contract Address (CA)</label>
+            <input
+                id="swap-ca"
+                type="text"
+                class="swap-input"
+                placeholder="Paste Bags token mint address…"
+                oninput="onInputChange()"
+                autocomplete="off"
+                spellcheck="false"
+            />
+            </div>
+        
+            <!-- Amount + Side -->
+            <div style="display:grid;grid-template-columns:1fr auto;gap:8px;">
+            <div class="swap-field">
+                <label class="swap-label" id="amount-label">Amount (SOL)</label>
+                <input
+                id="swap-amount"
+                type="number"
+                class="swap-input"
+                placeholder="0.00  (max 10 SOL)"
+                min="0"
+                step="0.01"
+                oninput="onInputChange()"
+                />
+            </div>
+            <div class="swap-field">
+                <label class="swap-label">Side</label>
+                <button id="swap-side" class="side-btn buy" data-side="buy" onclick="toggleSide()">▲ BUY</button>
+            </div>
+            </div>
+        
+            <!-- Slippage -->
+            <div class="swap-field">
+            <label class="swap-label" style="display:flex;justify-content:space-between;">
+                <span>Slippage (%)</span>
+                <span style="color:var(--cyan);" id="slippage-display">0.5%</span>
+            </label>
+            <input
+                id="swap-slippage"
+                type="range"
+                min="0.1" max="5" step="0.1" value="0.5"
+                style="width:100%;accent-color:var(--cyan);"
+                oninput="document.getElementById('slippage-display').textContent = this.value + '%'; onInputChange();"
+            />
+            <div style="display:flex;justify-content:space-between;font-size:9px;color:var(--muted);margin-top:3px;">
+                <span>0.1%</span><span>5%</span>
+            </div>
+            </div>
+        
+            <!-- Quote Box -->
+            <div id="swap-quote-box" class="quote-box"></div>
+        
+            <!-- Status -->
+            <div id="swap-status" style="font-family:var(--font-mono);font-size:11px;color:var(--muted);min-height:16px;"></div>
+        
+            <!-- Confirm Button -->
+            <button id="swap-exec-btn" onclick="executeSwap()" class="swap-exec-btn" disabled>
+            Confirm Swap
+            </button>
+        
+        </div>
+    </div>
+
+    <footer id="app-footer">
+ 
+  <!-- Left: Branding -->
+  <div class="footer-brand">
+    <span class="footer-logo">BAGS//FLOW</span>
+    <span class="footer-tagline">On-Chain Order Flow Dashboard · Built on Bags.fm</span>
+  </div>
+ 
+  <!-- Center: Links -->
+  <div class="footer-links">
+    <span class="footer-divider">·</span>
+    <span class="footer-divider">·</span>
+    <a href="https://solscan.io" target="_blank" class="footer-link">SOLSCAN</a>
+    <span class="footer-divider">·</span>
+    <span class="footer-divider">·</span>
+
+    <a href="https://x.com/0x_smokey0" target="_blank" class="footer-link footer-x-link flex gap-2">
+      <div>
+        <svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor">
+          <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-4.714-6.231-5.401 6.231H2.747l7.73-8.835L1.254 2.25H8.08l4.259 5.632 5.905-5.632zm-1.161 17.52h1.833L7.084 4.126H5.117z"/>
+        </svg>
+      </div>
+      <div>
+        @0x_smokey0
+      </div>
+    </a>
+  </div>
+ 
+  <!-- Right: Status + Hackathon badge -->
+  <div class="footer-right">
+    <div class="footer-badge">
+      <div class="footer-dot"></div>
+      <span>Built for Bags Hackathon</span>
+    </div>
+    <div class="footer-disclaimer">
+      Data is for informational purposes only. Not financial advice.
+    </div>
+  </div>
+ 
+</footer>
+
+  <script type="module" src="./js/dashboard.js"></script>
+  <script type="module" src="./js/swap.js"></script>
+</body>
+</html>
