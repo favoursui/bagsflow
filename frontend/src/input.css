@@ -546,7 +546,7 @@ body {
 }
 
 
-/* ── Responsive breakpoints ─────────────────────────────────────────── */
+/* Responsive breakpoints  */
 
 /* Tablet: collapse 2-col main grid to single column */
 @media (max-width: 1024px) {

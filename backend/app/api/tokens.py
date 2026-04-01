@@ -41,13 +41,16 @@ async def get_token_info(mint: str):
 @router.get("/token/{mint}/quote")
 async def get_token_quote(
     mint:         str,
-    amount:       float = Query(...,    description="Amount in SOL"),
-    side:         str   = Query("buy",  description="'buy' or 'sell'"),
+    amount:       float = Query(...,   description="Amount in SOL (buy) or tokens (sell)"),
+    side:         str   = Query("buy", description="'buy' or 'sell'"),
+    decimals:     int   = Query(9,     description="Token decimals (required for sell)"),
     slippageMode: str   = Query("auto"),
     slippageBps:  int   = Query(50),
 ):
     """
     Get a swap quote for a token CA.
+    - buy:  amount is SOL
+    - sell: amount is tokens (decimals param required)
     Returns the full quote ready to pass to POST /api/swap.
     """
     if len(mint) < 32:
@@ -59,12 +62,16 @@ async def get_token_quote(
     try:
         data = await bags.get_quote_for_mint(
             mint          = mint,
-            amount_sol    = amount,
+            amount        = amount,
             side          = side,
             slippage_mode = slippageMode,
             slippage_bps  = slippageBps,
+            decimals      = decimals,
         )
         return data
+    except ValueError as e:
+        # Bags API returned success=false — pass message to frontend
+        return {"success": False, "error": str(e)}
     except Exception as e:
         raise HTTPException(status_code=502, detail=str(e))
 
@@ -85,3 +92,22 @@ async def get_pools():
         return await bags.get_bags_pools()
     except Exception as e:
         raise HTTPException(status_code=502, detail=str(e))
+
+
+# ── GET /api/sol-price ────────────────────────────────────────────────────────
+@router.get("/sol-price")
+async def get_sol_price():
+    """Return current SOL/USD price from Jupiter."""
+    import httpx
+    from app.core.config import SOL_MINT
+    try:
+        async with httpx.AsyncClient(timeout=5) as client:
+            res  = await client.get(
+                "https://lite.jupiter.aggregator.io/price",
+                params={"ids": SOL_MINT},
+            )
+            data  = res.json()
+            price = float(data["data"][SOL_MINT]["price"])
+            return {"success": True, "price": price}
+    except Exception as e:
+        return {"success": False, "price": 0, "error": str(e)}

@@ -7,7 +7,7 @@ HEADERS = {
 }
 
 
-# Quote & Swap
+# Quote & Swap 
 
 async def get_quote(
     input_mint:    str,
@@ -20,11 +20,13 @@ async def get_quote(
     params = {
         "inputMint":    input_mint,
         "outputMint":   output_mint,
-        "amount":       amount,
+        "amount":       str(amount),   # send as string to avoid float precision issues
         "slippageMode": slippage_mode,
     }
     if slippage_mode == "manual":
         params["slippageBps"] = slippage_bps
+
+    print(f"[QUOTE] params: {params}")
 
     async with httpx.AsyncClient(timeout=10) as client:
         res = await client.get(
@@ -32,8 +34,30 @@ async def get_quote(
             headers=HEADERS,
             params=params,
         )
-        res.raise_for_status()
-        return res.json()
+        data = res.json()
+        print(f"[QUOTE] status={res.status_code} response={data}")
+
+        if res.status_code == 500:
+            raise ValueError("Bags API is unavailable — try again in a moment")
+        if res.status_code == 400:
+            raw = data.get("error") or data.get("message") or ""
+            raise ValueError(raw or "Quote request rejected — try a different amount")
+        if res.status_code == 404:
+            raise ValueError("Token not found on Bags.fm — it may not have a pool yet")
+
+        if not data.get("success"):
+            # Extract the real message from Bags if available
+            raw_error = data.get("error") or ""
+            if "liquidity" in raw_error.lower():
+                raise ValueError("Not enough liquidity for this trade")
+            elif "amount" in raw_error.lower():
+                raise ValueError(f"Invalid amount — {raw_error}")
+            elif "slippage" in raw_error.lower():
+                raise ValueError("Slippage too low — try increasing it")
+            else:
+                raise ValueError(raw_error or "Quote failed — try a smaller amount")
+
+        return data
 
 
 async def create_swap_transaction(quote_response: dict, user_public_key: str) -> dict:
@@ -66,7 +90,7 @@ async def send_transaction(transaction: str, last_valid_block_height: int) -> di
         return res.json()
 
 
-# Token & Pool
+# Token & Pool 
 
 async def get_token_launches(limit: int = 20) -> dict:
     """Fetch recent token launches from Bags."""
@@ -149,35 +173,101 @@ async def get_token_metadata(mint: str) -> dict:
     return {"name": name, "symbol": symbol, "decimals": decimals, "supply": supply}
 
 
+_sol_price_cache: dict = {"price": 0.0, "ts": 0.0}
+
+async def _get_sol_price_usd() -> float:
+    """Fetch live SOL/USD price from Jupiter. Cached for 60 seconds."""
+    import time
+    now = time.time()
+    if now - _sol_price_cache["ts"] < 60 and _sol_price_cache["price"] > 0:
+        return _sol_price_cache["price"]
+    try:
+        from app.core.config import SOL_MINT
+        async with httpx.AsyncClient(timeout=5) as client:
+            res = await client.get(
+                "https://lite.jupiter.aggregator.io/price",
+                params={"ids": SOL_MINT},
+            )
+            data  = res.json()
+            price = float(data["data"][SOL_MINT]["price"])
+            _sol_price_cache["price"] = price
+            _sol_price_cache["ts"]    = now
+            return price
+    except Exception:
+        # Fallback to a safe conservative estimate if Jupiter is unreachable
+        return _sol_price_cache["price"] or 150.0
+
+
 async def get_quote_for_mint(
     mint:          str,
-    amount_sol:    float,
+    amount:        float,
     side:          str = "buy",
     slippage_mode: str = "auto",
     slippage_bps:  int = 50,
+    decimals:      int = 9,
 ) -> dict:
     """
     Get a swap quote for a token mint.
-    Converts SOL amount to lamports and sets input/output mints by side.
+    - buy:  amount is in SOL → convert to lamports (9 decimals)
+    - sell: amount is in tokens → convert using token's decimals
     """
     from app.core.config import SOL_MINT
-    lamports = int(amount_sol * 1_000_000_000)
+
+    if amount <= 0:
+        raise ValueError("Amount must be greater than 0")
+
+    # Fetch live SOL price to enforce $2 minimum
+    sol_price_usd = await _get_sol_price_usd()
+    min_sol       = 2.0 / sol_price_usd if sol_price_usd > 0 else 0.001
 
     if side == "buy":
-        input_mint, output_mint = SOL_MINT, mint
+        # buy: amount is in SOL — validate directly
+        if amount > 10:
+            raise ValueError("Max buy is 10 SOL per trade")
+        if amount < min_sol:
+            raise ValueError(f"Minimum buy is $2 (≈ {min_sol:.4f} SOL)")
+        input_mint   = SOL_MINT
+        output_mint  = mint
+        raw_amount   = int(amount * 1_000_000_000)   # SOL → lamports
     else:
-        input_mint, output_mint = mint, SOL_MINT
+        # sell: amount is in tokens — get token price in SOL to validate
+        input_mint   = mint
+        output_mint  = SOL_MINT
+        raw_amount   = int(amount * (10 ** decimals)) # tokens → smallest unit
+        if raw_amount <= 0:
+            raise ValueError("Amount too small — enter a larger token amount")
+        # Estimate token value in SOL via a small probe quote (1 token)
+        try:
+            probe_raw = int(1 * (10 ** decimals))
+            probe = await get_quote(
+                input_mint    = mint,
+                output_mint   = SOL_MINT,
+                amount        = probe_raw,
+                slippage_mode = "auto",
+            )
+            sol_per_token  = int(probe["response"]["outAmount"]) / 1_000_000_000
+            trade_value_sol = amount * sol_per_token
+            if trade_value_sol > 10:
+                raise ValueError(f"Max sell is 10 SOL per trade (your {amount} tokens ≈ {trade_value_sol:.3f} SOL)")
+            if trade_value_sol < min_sol:
+                raise ValueError(f"Minimum sell is $2 (your {amount} tokens ≈ ${trade_value_sol * sol_price_usd:.2f})")
+        except ValueError:
+            raise
+        except Exception:
+            pass  # if probe fails, let the real quote proceed and Bags will error naturally
+
+    print(f"[QUOTE] side={side} amount={amount} raw_amount={raw_amount} decimals={decimals}")
 
     return await get_quote(
         input_mint    = input_mint,
         output_mint   = output_mint,
-        amount        = lamports,
+        amount        = raw_amount,
         slippage_mode = slippage_mode,
         slippage_bps  = slippage_bps,
     )
 
 
-# Analytics
+# Analytics 
 
 async def get_token_lifetime_fees(mint: str) -> dict:
     """Fetch lifetime fee stats for a token."""
