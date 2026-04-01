@@ -15,17 +15,17 @@ It also includes a fully functional **in-app swap panel** powered by the Bags AP
 
 ## Features
 
-- **Live Trade Feed** — every swap on Bags.fm tokens streamed in real time via Helius WebSocket
-- **Whale Alerts** — trades ≥ $500 flagged and highlighted instantly
-- **Net Order Flow Chart** — buy vs sell pressure visualised per token
-- **Top Traders Leaderboard** — ranked by volume in the current session
-- **New Token Launches** — live feed of tokens launching on Bags.fm
-- **In-App Swap Panel** — connect Phantom, Backpack, or Solflare and swap directly
+- **Live Trade Feed**: every swap on Bags.fm tokens streamed in real time via Helius WebSocket
+- **Whale Alerts** : trades ≥ $500 flagged and highlighted instantly
+- **Net Order Flow Chart**: buy vs sell pressure visualised per token
+- **Top Traders Leaderboard** : ranked by volume in the current session
+- **New Token Launches**: live feed of tokens launching on Bags.fm
+- **In-App Swap Panel**: connect Phantom, Backpack, or Solflare and swap directly
   - Paste any Bags.fm token CA to validate and get a quote
   - Buy (SOL → token) or Sell (token → SOL)
   - Live quote from Meteora DAMM v2 via Bags API
   - Slippage control, price impact display, Solscan TXN link on success
-  - Min trade: $2 | Max trade: 10 SOL
+  - Min trade: $2 and Max trade: 10 SOL
 
 ---
 
