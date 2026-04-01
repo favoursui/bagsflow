@@ -7,7 +7,7 @@
 
 ## What is BAGS//FLOW?
 
-BAGS//FLOW is a live trading dashboard for the Bags.fm ecosystem on Solana. It streams every trade happening on Bags.fm tokens in real time and presents it in a clean, terminal-style UI — giving traders instant visibility into order flow, whale activity, and new token launches.
+BAGS//FLOW is a live trading dashboard for the Bags.fm ecosystem on Solana. It streams every trade happening on Bags.fm tokens in real time and presents it in a clean, terminal-style UI, giving traders instant visibility into order flow, whale activity, and new token launches.
 
 It also includes a fully functional **in-app swap panel** powered by the Bags API, letting users buy and sell Bags.fm tokens directly from the dashboard without leaving the page.
 
@@ -58,7 +58,7 @@ Browser
                                 program addresses)
 ```
 
-Nginx sits in front of everything — serves the static frontend and proxies `/api/` and `/ws` to the FastAPI backend. No CORS issues, single origin.
+Nginx sits in front of everything, serves the static frontend and proxies `/api/` and `/ws` to the FastAPI backend. No CORS issues, single origin.
 
 ---
 
