@@ -2,7 +2,6 @@
 
 **Real-time on-chain order flow dashboard built on Bags.fm**
 
-
 ---
 
 ## What is BAGS//FLOW?
