@@ -37,14 +37,14 @@ function detectWallets() {
   if (window.phantom?.solana?.isPhantom || window.solana?.isPhantom) {
     found.push({
       name: 'Phantom',
-      icon: `<svg width="18" height="18" viewBox="0 0 128 128" fill="none" xmlns="http://www.w3.org/2000/svg"><rect width="128" height="128" rx="24" fill="#AB9FF2"/><path d="M110.584 64.9142C110.584 49.778 99.4812 37.5 85.7596 37.5C78.6898 37.5 72.2654 40.5266 67.7182 45.4056C63.171 40.5266 56.7465 37.5 49.6768 37.5C35.9552 37.5 24.8521 49.778 24.8521 64.9142C24.8521 80.0504 35.9552 92.3284 49.6768 92.3284C53.6888 92.3284 57.468 91.2573 60.7716 89.3689L64.0001 91.2573L67.2287 89.3689C70.5323 91.2573 74.3115 92.3284 78.3235 92.3284C92.045 92.3284 110.584 80.0504 110.584 64.9142Z" fill="white"/><path d="M90.2415 55.8154C90.2415 53.0618 88.0227 50.8301 85.2846 50.8301H74.7249C71.9868 50.8301 69.768 53.0618 69.768 55.8154V73.1214C69.768 75.875 71.9868 78.1067 74.7249 78.1067H85.2846C88.0227 78.1067 90.2415 75.875 90.2415 73.1214V55.8154Z" fill="#AB9FF2"/><path d="M58.2321 55.8154C58.2321 53.0618 56.0133 50.8301 53.2752 50.8301H42.7155C39.9774 50.8301 37.7586 53.0618 37.7586 55.8154V73.1214C37.7586 75.875 39.9774 78.1067 42.7155 78.1067H53.2752C56.0133 78.1067 58.2321 75.875 58.2321 73.1214V55.8154Z" fill="#AB9FF2"/></svg>`,
+      icon: `<img src='/img/phantom-logo.png' width='18' height='18' style='border-radius:4px;' />`,
       provider: window.phantom?.solana || window.solana,
     });
   }
   if (window.backpack?.isBackpack) {
     found.push({
       name: 'Backpack',
-      icon: `<svg width="18" height="18" viewBox="0 0 128 128" fill="none" xmlns="http://www.w3.org/2000/svg"><rect width="128" height="128" rx="24" fill="#E33E3F"/><path d="M83.5 38H44.5C41.4624 38 39 40.4624 39 43.5V84.5C39 87.5376 41.4624 90 44.5 90H83.5C86.5376 90 89 87.5376 89 84.5V43.5C89 40.4624 86.5376 38 83.5 38Z" fill="white"/><path d="M64 48C57.3726 48 52 53.3726 52 60V62H76V60C76 53.3726 70.6274 48 64 48Z" fill="#E33E3F"/><path d="M52 62H76V78H52V62Z" fill="#E33E3F"/><path d="M58 78H70V84H58V78Z" fill="#E33E3F"/><circle cx="64" cy="71" r="4" fill="white"/></svg>`,
+      icon: `<img src='/img/backpack-logo.png' width='18' height='18' style='border-radius:4px;' />`,
       provider: window.backpack,
     });
   }
