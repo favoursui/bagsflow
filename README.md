@@ -99,7 +99,7 @@ Open **http://localhost:5500** in your browser.
 
 ## How to Use
 
-1. Open the dashboard — the live dot turns green when the stream connects
+1. Open the dashboard
 2. Trades appear in the feed as they happen on-chain
 3. Whale trades (≥ $500) flash in the whale panel
 4. Click **Connect Wallet** (top right) to open the swap panel
