@@ -4,7 +4,7 @@ from app.services import bags
 router = APIRouter()
 
 
-# ── GET /api/token/{mint} ─────────────────────────────────────────────────────
+# get token mint 
 @router.get("/token/{mint}")
 async def get_token_info(mint: str):
     """
@@ -37,7 +37,7 @@ async def get_token_info(mint: str):
         raise HTTPException(status_code=502, detail=str(e))
 
 
-# ── GET /api/token/{mint}/quote ───────────────────────────────────────────────
+# get token mint quote 
 @router.get("/token/{mint}/quote")
 async def get_token_quote(
     mint:         str,
@@ -76,7 +76,7 @@ async def get_token_quote(
         raise HTTPException(status_code=502, detail=str(e))
 
 
-# ── GET /api/launches ─────────────────────────────────────────────────────────
+# get launches 
 @router.get("/launches")
 async def get_launches(limit: int = Query(20, ge=1, le=100)):
     try:
@@ -85,7 +85,7 @@ async def get_launches(limit: int = Query(20, ge=1, le=100)):
         raise HTTPException(status_code=502, detail=str(e))
 
 
-# ── GET /api/pools ────────────────────────────────────────────────────────────
+# Get pools 
 @router.get("/pools")
 async def get_pools():
     try:
@@ -94,7 +94,7 @@ async def get_pools():
         raise HTTPException(status_code=502, detail=str(e))
 
 
-# ── GET /api/sol-price ────────────────────────────────────────────────────────
+#  get sol-price 
 @router.get("/sol-price")
 async def get_sol_price():
     """Return current SOL/USD price from Jupiter."""
