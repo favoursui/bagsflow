@@ -11,7 +11,7 @@ import { VersionedTransaction } from 'https://esm.sh/@solana/web3.js@1.95.3';
 
 const SOL_MINT         = 'So11111111111111111111111111111111111111112';
 const LAMPORTS_PER_SOL = 1_000_000_000;
-const BACKEND = '/api'; // proxied by Nginx
+const BACKEND = 'https://bagsflow-production.up.railway.app/api';
 
 
 // WALLET STATE

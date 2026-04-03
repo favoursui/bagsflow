@@ -12,7 +12,7 @@ import Chart from 'https://cdn.jsdelivr.net/npm/chart.js/auto/+esm';
 const WHALE_THRESHOLD  = 500;           // USD — trades above this are "whales"
 const MAX_FEED_ROWS    = 80;            // max rows kept in live feed
 const TRADE_INTERVAL   = 900;          // ms between mock trades
-const WS_URL = `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/ws`; // proxied by Nginx
+const WS_URL = 'wss://bagsflow-production.up.railway.app/ws';
 
 // STATE
 
@@ -139,9 +139,9 @@ function addToWhale(trade) {
 
 // MODULE 3 — NET ORDER FLOW CHART
 
-const chartTokens = [...TOKENS.slice(0, 8)];
-const buyData     = Array(8).fill(0);
-const sellData    = Array(8).fill(0);
+const chartTokens = [];   // populated by real trades
+const buyData     = [];
+const sellData    = [];
 
 function initChart() {
   const ctx = document.getElementById('flow-chart').getContext('2d');
@@ -212,7 +212,18 @@ function initChart() {
 }
 
 function updateChart(token, side, amount) {
-  const idx = chartTokens.indexOf(token);
+  if (!token) return;
+  let idx = chartTokens.indexOf(token);
+  // Add new token to chart dynamically (max 12)
+  if (idx === -1 && chartTokens.length < 12) {
+    chartTokens.push(token);
+    buyData.push(0);
+    sellData.push(0);
+    idx = chartTokens.length - 1;
+    state.chart.data.labels    = chartTokens;
+    state.chart.data.datasets[0].data = buyData;
+    state.chart.data.datasets[1].data = sellData;
+  }
   if (idx === -1) return;
   if (side === 'BUY')  buyData[idx]  += amount;
   else                 sellData[idx] += amount;
