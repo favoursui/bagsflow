@@ -51,14 +51,14 @@ function detectWallets() {
   if (window.solflare?.isSolflare) {
     found.push({
       name: 'Solflare',
-      icon: `<svg width="18" height="18" viewBox="0 0 32 32" fill="none"><rect width="32" height="32" rx="8" fill="#FC7227"/><path d="M16 6l8 14H8L16 6z" fill="#fff" opacity=".9"/><path d="M16 26l-8-8h16l-8 8z" fill="#fff"/></svg>`,
+      icon: `<img src='/img/solflare-logo.jpeg' width='18' height='18' style='border-radius:4px;' />`,
       provider: window.solflare,
     });
   }
   if (window.coinbaseSolana) {
     found.push({
       name: 'Coinbase',
-      icon: `<svg width="18" height="18" viewBox="0 0 32 32" fill="none"><rect width="32" height="32" rx="8" fill="#0052FF"/><circle cx="16" cy="16" r="8" fill="#fff"/><path d="M16 11a5 5 0 1 0 0 10A5 5 0 0 0 16 11zm0 8a3 3 0 1 1 0-6 3 3 0 0 1 0 6z" fill="#0052FF"/></svg>`,
+      icon: `<img src='/img/coinbase-logo.png' width='18' height='18' style='border-radius:4px;' />`,
       provider: window.coinbaseSolana,
     });
   }
