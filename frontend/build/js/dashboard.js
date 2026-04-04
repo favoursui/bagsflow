@@ -2,66 +2,25 @@ import Chart from 'https://cdn.jsdelivr.net/npm/chart.js/auto/+esm';
 
 /**
  * BAGS//FLOW — On-Chain Order Flow Dashboard
- * dashboard.js — All UI logic + Mock data engine
- *
- * Mock mode: streams realistic fake data until FastAPI backend is ready.
- * When backend is ready, set WS_URL to your server and it auto-switches.
+ * dashboard.js — All UI logic + Real-time data from Helius/Bags.fm
  */
 
 
 const WHALE_THRESHOLD  = 500;           // USD — trades above this are "whales"
 const MAX_FEED_ROWS    = 80;            // max rows kept in live feed
-const TRADE_INTERVAL   = 900;          // ms between mock trades
 const WS_URL = 'wss://bagsflow-production.up.railway.app/ws';
 
 // STATE
 
 const state = {
-  stats:       { vol: 0, trades: 0, whales: 0, buys: 0, sells: 0 },
+  stats:       { vol: 0, trades: 0, whales: 0, buys: 0, sells: 0, buyVol: 0, sellVol: 0, startTime: null },
   leaderboard: {},
   chart:       null,
   connected:   false,
 };
 
 
-// MOCK DATA ENGINE || initially for test purposes befor connecting to my backend
 
-const TOKENS  = ['PEPE','BONK','WIF','MYRO','POPCAT','MOODENG','PNUT','GOAT'];
-const NAMES   = ['DINO','CATZ','MOOSE','FLOKI2','MEOW','WAGMI','SNEK','PUPS','TURBO','ORCA'];
-
-function rand(min, max)   { return Math.random() * (max - min) + min; }
-function randInt(min, max){ return Math.floor(rand(min, max)); }
-function pick(arr)        { return arr[randInt(0, arr.length)]; }
-
-function mockWallet() {
-  const chars = '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz';
-  return Array.from({ length: 44 }, () => chars[randInt(0, chars.length)]).join('');
-}
-function mockTx() {
-  return Array.from({ length: 64 }, () => '0123456789abcdef'[randInt(0, 16)]).join('');
-}
-
-function mockTrade() {
-  const isWhale = Math.random() < 0.09;
-  return {
-    id:     Date.now() + Math.random(),
-    token:  pick(TOKENS),
-    side:   Math.random() > 0.47 ? 'BUY' : 'SELL',
-    amount: isWhale ? rand(500, 9000) : rand(8, 490),
-    wallet: mockWallet(),
-    tx:     mockTx(),
-    time:   new Date(),
-  };
-}
-
-function mockLaunch() {
-  return {
-    name:  pick(NAMES) + randInt(10, 999),
-    price: rand(0.0000001, 0.001),
-    mcap:  rand(3000, 200000),
-    time:  new Date(),
-  };
-}
 
 // FORMATTERS
 
@@ -76,26 +35,40 @@ function fmtPrice(n) {
 }
 function fmtWallet(w) { return w.slice(0, 4) + '···' + w.slice(-4); }
 function fmtTime(d)   { return d.toTimeString().slice(0, 8); }
+function fmtNum(n)    {
+  if (n >= 1_000_000) return (n/1_000_000).toFixed(2)+'M';
+  if (n >= 1_000)     return (n/1_000).toFixed(1)+'K';
+  return n.toFixed(2);
+}
+function fmtAge(d) {
+  const s = Math.floor((Date.now() - d) / 1000);
+  if (s < 60)   return s + 's';
+  if (s < 3600) return Math.floor(s/60) + 'm';
+  return Math.floor(s/3600) + 'h';
+}
 
 
 // MODULE 1 — LIVE TRADE FEED
 
 function addToFeed(trade) {
-  const list = document.getElementById('feed-list');
-  const row  = document.createElement('div');
-  row.className = 'feed-row new-row';
-
+  const list    = document.getElementById('feed-list');
+  const row     = document.createElement('div');
   const isBuy   = trade.side === 'BUY';
-  const color   = isBuy ? 'var(--green)' : 'var(--red)';
-  const symbol  = isBuy ? '▲' : '▼';
   const isWhale = trade.amount >= WHALE_THRESHOLD;
+  row.className = 'feed-row' + (isWhale ? ' whale-row' : '');
+
+  const totalStr = isWhale
+    ? `<span style="color:var(--gold);font-weight:700;text-align:right;">${fmtUSD(trade.amount)}</span>`
+    : `<span style="color:var(--text);text-align:right;">${fmtUSD(trade.amount)}</span>`;
 
   row.innerHTML = `
-    <span style="color:var(--cyan);font-weight:700;">${trade.token}</span>
-    <span style="color:${color};">${symbol} ${trade.side}</span>
-    <span style="color:${isWhale ? 'var(--gold)' : 'var(--text)'};">${fmtUSD(trade.amount)}</span>
-    <span style="color:var(--muted);" title="${trade.wallet}">${fmtWallet(trade.wallet)}</span>
     <span style="color:var(--muted);">${fmtTime(trade.time)}</span>
+    <span class="${isBuy ? 'side-buy' : 'side-sell'}">${isBuy ? '&#9650; BUY' : '&#9660; SELL'}</span>
+    <span style="color:var(--cyan);font-weight:600;">$${trade.token}</span>
+    <span style="color:var(--muted);" title="${trade.wallet}">${fmtWallet(trade.wallet)}</span>
+    <span style="color:var(--text);text-align:right;">${fmtNum(trade.amount)}</span>
+    <span style="color:var(--muted);text-align:right;">—</span>
+    ${totalStr}
   `;
 
   list.prepend(row);
@@ -104,36 +77,27 @@ function addToFeed(trade) {
 }
 
 
+
 // MODULE 2 — WHALE ALERTS
 
 function addToWhale(trade) {
-  const list  = document.getElementById('whale-list');
-  const item  = document.createElement('div');
-  item.className = 'whale-item whale-flash';
-
-  const isBuy = trade.side === 'BUY';
-  const color = isBuy ? 'var(--green)' : 'var(--red)';
+  const list   = document.getElementById('whale-list');
+  const item   = document.createElement('div');
+  item.className = 'whale-item';
+  const isBuy  = trade.side === 'BUY';
+  const arrow  = isBuy ? '▲' : '▼';
+  const cls    = isBuy ? 'whale-dir-up' : 'whale-dir-down';
 
   item.innerHTML = `
-    <div class="whale-badge">🐋 WHALE</div>
-    <div style="flex:1;min-width:0;">
-      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
-        <span style="color:var(--cyan);font-weight:700;">${trade.token}</span>
-        <span style="color:${color};font-family:var(--font-mono);font-size:11px;">${trade.side}</span>
-        <span style="color:var(--gold);font-family:var(--font-mono);font-weight:700;">${fmtUSD(trade.amount)}</span>
-      </div>
-      <div style="color:var(--muted);margin-top:2px;font-family:var(--font-mono);font-size:10px;">
-        ${fmtWallet(trade.wallet)} · ${fmtTime(trade.time)}
-      </div>
-    </div>
-    <a href="https://solscan.io/tx/${trade.tx}" target="_blank"
-       style="color:var(--muted);font-family:var(--font-mono);font-size:9px;text-decoration:none;
-              border:1px solid var(--border);padding:2px 6px;border-radius:3px;white-space:nowrap;"
-       title="View on Solscan">↗ TX</a>
+    <span class="${cls}">${arrow}</span>
+    <span class="whale-token">$${trade.token}</span>
+    <span class="whale-meta" style="flex:1;padding:0 8px;" title="${trade.wallet}">${fmtWallet(trade.wallet)}</span>
+    <span class="whale-amt">${fmtUSD(trade.amount)}</span>
+    <span class="whale-meta" style="margin-left:8px;">${fmtTime(trade.time)}</span>
   `;
 
   list.prepend(item);
-  while (list.children.length > 25) list.removeChild(list.lastChild);
+  while (list.children.length > 20) list.removeChild(list.lastChild);
 }
 
 
@@ -274,18 +238,21 @@ function renderLeaderboard() {
 // MODULE 5 — NEW TOKEN LAUNCHES
 
 function addLaunch(launch) {
-  const list = document.getElementById('launch-list');
-  const row  = document.createElement('div');
-  row.className = 'launch-row new-row launch-flash';
-  row.innerHTML = `
-    <span style="color:var(--cyan);font-weight:700;">$${launch.name}</span>
-    <span style="font-family:var(--font-mono);color:var(--gold);">${fmtPrice(launch.price)}</span>
-    <span style="font-family:var(--font-mono);color:var(--text);">${fmtUSD(launch.mcap)}</span>
-    <span style="font-family:var(--font-mono);color:var(--muted);">${fmtTime(launch.time)}</span>
-  `;
+  const list   = document.getElementById('launch-list');
+  const row    = document.createElement('div');
+  row.className = 'launch-row';
+  const symbol = launch.symbol || launch.name || '???';
+  const age    = launch.time ? fmtAge(new Date(launch.time)) : '—';
+  const mcap   = launch.mcap   > 0 ? fmtUSD(launch.mcap)   : '—';
+  const vol    = launch.volume > 0 ? fmtUSD(launch.volume)  : '—';
+  const link   = launch.mint
+    ? `<a href="https://solscan.io/token/${launch.mint}" target="_blank" style="color:var(--cyan);font-weight:600;text-decoration:none;">$${symbol}</a>`
+    : `<span style="color:var(--cyan);font-weight:600;">$${symbol}</span>`;
+  row.innerHTML = `${link}<span style="color:var(--muted);text-align:right;">${age}</span><span style="color:var(--text);text-align:right;">${mcap}</span><span style="color:var(--green);text-align:right;">${vol}</span>`;
   list.prepend(row);
   while (list.children.length > 40) list.removeChild(list.lastChild);
 }
+
 
 
 // STATS BAR
@@ -293,13 +260,37 @@ function updateStats(trade) {
   state.stats.vol    += trade.amount;
   state.stats.trades += 1;
   if (trade.amount >= WHALE_THRESHOLD) state.stats.whales += 1;
-  if (trade.side === 'BUY') state.stats.buys++;
-  else state.stats.sells++;
+  if (trade.side === 'BUY') { state.stats.buys++; state.stats.buyVol += trade.amount; }
+  else                      { state.stats.sells++; state.stats.sellVol += trade.amount; }
 
-  document.getElementById('stat-vol').textContent    = fmtUSD(state.stats.vol);
-  document.getElementById('stat-trades').textContent = state.stats.trades.toLocaleString();
-  document.getElementById('stat-whales').textContent = state.stats.whales;
-  document.getElementById('stat-ratio').textContent  = state.stats.buys + '/' + state.stats.sells;
+  const total = state.stats.buys + state.stats.sells;
+  const buyPct  = total > 0 ? Math.round(state.stats.buys  / total * 100) : 50;
+  const sellPct = 100 - buyPct;
+
+  document.getElementById('stat-trades').textContent  = state.stats.trades.toLocaleString();
+  document.getElementById('stat-buy-vol').textContent  = fmtUSD(state.stats.buyVol);
+  document.getElementById('stat-sell-vol').textContent = fmtUSD(state.stats.sellVol);
+  document.getElementById('stat-buy-pct').textContent  = buyPct + '%';
+  document.getElementById('stat-sell-pct').textContent = sellPct + '%';
+  document.getElementById('stat-whales').textContent   = state.stats.whales;
+  const fill = document.getElementById('ratio-fill');
+  if (fill) fill.style.width = buyPct + '%';
+
+  // Rate (trades per min)
+  if (!state.stats.startTime) state.stats.startTime = Date.now();
+  const mins = (Date.now() - state.stats.startTime) / 60000;
+  const rate = mins > 0 ? Math.round(state.stats.trades / mins) : 0;
+  document.getElementById('stat-rate').textContent = rate + '/min';
+
+  // Mobile stats
+  const mt = document.getElementById('stat-trades-m');
+  const mb = document.getElementById('stat-buy-vol-m');
+  const ms = document.getElementById('stat-sell-vol-m');
+  const mw = document.getElementById('stat-whales-m');
+  if (mt) mt.textContent = state.stats.trades.toLocaleString();
+  if (mb) mb.textContent = fmtUSD(state.stats.buyVol);
+  if (ms) ms.textContent = fmtUSD(state.stats.sellVol);
+  if (mw) mw.textContent = state.stats.whales;
 }
 
 
@@ -315,7 +306,7 @@ function startClock() {
 }
 
 
-// TRADE PROCESSOR (shared by mock + backend)
+// TRADE PROCESSOR
 
 function processTrade(trade) {
   addToFeed(trade);
@@ -326,46 +317,20 @@ function processTrade(trade) {
 }
 
 
-// MOCK MODE (active until backend connects)
-
-function startMockMode() {
-  console.log('📊 Mock mode active — streaming fake data');
-
-  // Pre-seed with initial data
-  for (let i = 0; i < 20; i++) processTrade(mockTrade());
-  for (let i = 0; i < 6; i++)  addLaunch(mockLaunch());
-  renderLeaderboard();
-
-  // Live trade stream
-  setInterval(() => processTrade(mockTrade()), TRADE_INTERVAL);
-
-  // New launch every 25–50 seconds
-  const scheduleLaunch = () => {
-    setTimeout(() => {
-      addLaunch(mockLaunch());
-      scheduleLaunch();
-    }, rand(25_000, 50_000));
-  };
-  scheduleLaunch();
-}
-
-
 // BACKEND WEBSOCKET
 // Auto-reconnects if the backend drops mid-session.
-// Falls back to mock only if backend is unreachable on first attempt.
 
 const RECONNECT_INTERVAL = 3000;  // ms between reconnect attempts
 
 function connectBackend() {
   let ws = null;
-  let mockStarted = false;
   let reconnectTimer = null;
 
   function connect() {
     try {
       ws = new WebSocket(WS_URL);
     } catch (e) {
-      if (!mockStarted) { mockStarted = true; startMockMode(); }
+      console.log('⚠️ Backend unreachable');
       return;
     }
 
@@ -415,10 +380,8 @@ function connectBackend() {
     };
 
     ws.onerror = () => {
-      if (!state.connected && !mockStarted) {
-        console.log('ℹ️  Backend unreachable — running in mock mode');
-        mockStarted = true;
-        startMockMode();
+      if (!state.connected) {
+        console.log('⚠️  Backend unreachable — retrying…');
       }
     };
 
@@ -427,7 +390,7 @@ function connectBackend() {
         console.log('⚠️  Backend disconnected — reconnecting…');
         state.connected = false;
       }
-      // Always try to reconnect (even if in mock mode, real backend may come up)
+      // Always try to reconnect
       reconnectTimer = setTimeout(connect, RECONNECT_INTERVAL);
     };
   }
