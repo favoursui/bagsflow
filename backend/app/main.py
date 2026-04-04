@@ -72,7 +72,7 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins = [
         FRONTEND_ORIGIN,
-        "https://bagsflow.vercel.app"
+        "https://bagsflow.vercel.app",
         "http://localhost:5500",
         "http://127.0.0.1:5500",
         "http://localhost:3000",
@@ -86,7 +86,7 @@ app.add_middleware(
 register_routes(app)
 
 
-# WebSocket 
+# WebSocket endpoint 
 @app.websocket("/ws")
 async def websocket_endpoint(ws: WebSocket):
     await manager.connect(ws)
@@ -97,11 +97,11 @@ async def websocket_endpoint(ws: WebSocket):
         manager.disconnect(ws)
 
 
-# Health 
+# Health check
 @app.get("/health")
 async def health():
     return {
         "status":  "ok",
         "clients": len(manager.active),
-        "stream":  "live" if manager._stream_ok else "connecting",
+        "stream":  "live" if getattr(manager, '_stream_ok', False) else "connecting",
     }
