@@ -41,7 +41,9 @@ function fmtNum(n)    {
   return n.toFixed(2);
 }
 function fmtAge(d) {
+  if (!d || isNaN(d.getTime())) return 'new';
   const s = Math.floor((Date.now() - d) / 1000);
+  if (s < 0)    return 'new';
   if (s < 60)   return s + 's';
   if (s < 3600) return Math.floor(s/60) + 'm';
   return Math.floor(s/3600) + 'h';
