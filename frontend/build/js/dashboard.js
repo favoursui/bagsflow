@@ -8,10 +8,7 @@ import Chart from 'https://cdn.jsdelivr.net/npm/chart.js/auto/+esm';
 
 const WHALE_THRESHOLD  = 500;           // USD — trades above this are "whales"
 const MAX_FEED_ROWS    = 80;            // max rows kept in live feed
-const WS_URL = 'ws://localhost:8000/ws';
-
-
-// const WS_URL = 'wss://bagsflow-production.up.railway.app/ws';
+const WS_URL = 'wss://bagsflow-production.up.railway.app/ws';
 
 // STATE
 
