@@ -3,12 +3,15 @@ import Chart from 'https://cdn.jsdelivr.net/npm/chart.js/auto/+esm';
 /**
  * BAGS//FLOW — On-Chain Order Flow Dashboard
  * dashboard.js — All UI logic + Real-time data from Helius/Bags.fm
- */
+*/
 
 
 const WHALE_THRESHOLD  = 500;           // USD — trades above this are "whales"
 const MAX_FEED_ROWS    = 80;            // max rows kept in live feed
-const WS_URL = 'wss://bagsflow-production.up.railway.app/ws';
+const WS_URL = 'ws://localhost:8000/ws';
+
+
+// const WS_URL = 'wss://bagsflow-production.up.railway.app/ws';
 
 // STATE
 
@@ -57,20 +60,14 @@ function addToFeed(trade) {
   const row     = document.createElement('div');
   const isBuy   = trade.side === 'BUY';
   const isWhale = trade.amount >= WHALE_THRESHOLD;
-  row.className = 'feed-row' + (isWhale ? ' whale-row' : '');
-
-  const totalStr = isWhale
-    ? `<span style="color:var(--gold);font-weight:700;text-align:right;">${fmtUSD(trade.amount)}</span>`
-    : `<span style="color:var(--text);text-align:right;">${fmtUSD(trade.amount)}</span>`;
+  row.className = 'feed-row new-row';
 
   row.innerHTML = `
-    <span style="color:var(--muted);">${fmtTime(trade.time)}</span>
-    <span class="${isBuy ? 'side-buy' : 'side-sell'}">${isBuy ? '&#9650; BUY' : '&#9660; SELL'}</span>
-    <span style="color:var(--cyan);font-weight:600;">$${trade.token}</span>
-    <span style="color:var(--muted);" title="${trade.wallet}">${fmtWallet(trade.wallet)}</span>
-    <span style="color:var(--text);text-align:right;">${fmtNum(trade.amount)}</span>
-    <span style="color:var(--muted);text-align:right;">—</span>
-    ${totalStr}
+    <span style="font-family:var(--font-mono);color:var(--muted);">${fmtTime(trade.time)}</span>
+    <span class="${isBuy ? 'side-buy' : 'side-sell'}">${isBuy ? '▲ BUY' : '▼ SELL'}</span>
+    <span style="font-family:var(--font-mono);color:var(--cyan);font-weight:600;">$${trade.token}</span>
+    <span style="font-family:var(--font-mono);color:var(--muted);" title="${trade.wallet}">${fmtWallet(trade.wallet)}</span>
+    <span style="font-family:var(--font-mono);color:${isWhale ? 'var(--gold)' : 'var(--text)'};">${fmtUSD(trade.amount)}</span>
   `;
 
   list.prepend(row);
@@ -80,27 +77,29 @@ function addToFeed(trade) {
 
 
 
+
 // MODULE 2 — WHALE ALERTS
 
 function addToWhale(trade) {
-  const list   = document.getElementById('whale-list');
-  const item   = document.createElement('div');
-  item.className = 'whale-item';
-  const isBuy  = trade.side === 'BUY';
-  const arrow  = isBuy ? '▲' : '▼';
-  const cls    = isBuy ? 'whale-dir-up' : 'whale-dir-down';
+  const list  = document.getElementById('whale-list');
+  const item  = document.createElement('div');
+  item.className = 'whale-item whale-flash';
+  const isBuy = trade.side === 'BUY';
+  const color = isBuy ? 'var(--green)' : 'var(--red)';
+  const arrow = isBuy ? '▲' : '▼';
 
   item.innerHTML = `
-    <span class="${cls}">${arrow}</span>
-    <span class="whale-token">$${trade.token}</span>
-    <span class="whale-meta" style="flex:1;padding:0 8px;" title="${trade.wallet}">${fmtWallet(trade.wallet)}</span>
-    <span class="whale-amt">${fmtUSD(trade.amount)}</span>
-    <span class="whale-meta" style="margin-left:8px;">${fmtTime(trade.time)}</span>
+    <span style="color:${color};font-weight:700;margin-right:4px;">${arrow}</span>
+    <span style="font-family:var(--font-mono);color:var(--cyan);font-weight:700;">$${trade.token}</span>
+    <span style="font-family:var(--font-mono);color:var(--muted);flex:1;padding:0 8px;overflow:hidden;text-overflow:ellipsis;" title="${trade.wallet}">${fmtWallet(trade.wallet)}</span>
+    <span style="font-family:var(--font-mono);color:var(--gold);font-weight:700;">${fmtUSD(trade.amount)}</span>
+    <span style="font-family:var(--font-mono);color:var(--muted);margin-left:8px;">${fmtTime(trade.time)}</span>
   `;
 
   list.prepend(item);
-  while (list.children.length > 20) list.removeChild(list.lastChild);
+  while (list.children.length > 25) list.removeChild(list.lastChild);
 }
+
 
 
 // MODULE 3 — NET ORDER FLOW CHART
@@ -209,9 +208,16 @@ function updateLeaderboard(trade) {
   state.leaderboard[w].vol    += trade.amount;
   state.leaderboard[w].trades += 1;
 
-  // Refresh display every 5 trades (not every trade — cheaper)
+  // Refresh display every 5 trades
   lbTimer++;
-  if (lbTimer % 5 === 0) renderLeaderboard();
+  if (lbTimer % 5 === 0) {
+    renderLeaderboard();
+    // Also refresh session traders panel if on session tab
+    if (_traderTf === 'session') {
+      const tl = document.getElementById('traders-list');
+      if (tl) renderSessionTraders(tl);
+    }
+  }
 }
 
 function renderLeaderboard() {
@@ -241,16 +247,28 @@ function renderLeaderboard() {
 
 function addLaunch(launch) {
   const list   = document.getElementById('launch-list');
+  if (!list) return;
+  // Track mint to avoid duplicates with loadLaunches
+  const mintKey = launch.mint || launch.symbol;
+  if (mintKey) {
+    if (_seenLaunchMints.has(mintKey)) return;
+    _seenLaunchMints.add(mintKey);
+  }
+  // Remove placeholder if present
+  const ph = list.querySelector('div[style]');
+  if (ph) ph.remove();
   const row    = document.createElement('div');
   row.className = 'launch-row';
   const symbol = launch.symbol || launch.name || '???';
-  const age    = launch.time ? fmtAge(new Date(launch.time)) : '—';
-  const mcap   = launch.mcap   > 0 ? fmtUSD(launch.mcap)   : '—';
-  const vol    = launch.volume > 0 ? fmtUSD(launch.volume)  : '—';
+  const mcap   = launch.marketCap > 0 ? fmtUSD(launch.marketCap) : '—';
+  const price  = launch.price > 0 ? fmtPrice(launch.price) : '—';
+  const chg    = (launch.priceChange24h !== undefined && launch.priceChange24h !== 0)
+    ? `<span style="color:${launch.priceChange24h >= 0 ? 'var(--green)' : 'var(--red)'};">${launch.priceChange24h >= 0 ? '+' : ''}${launch.priceChange24h.toFixed(1)}%</span>`
+    : `<span style="color:var(--muted);">—</span>`;
   const link   = launch.mint
-    ? `<a href="https://solscan.io/token/${launch.mint}" target="_blank" style="color:var(--cyan);font-weight:600;text-decoration:none;">$${symbol}</a>`
-    : `<span style="color:var(--cyan);font-weight:600;">$${symbol}</span>`;
-  row.innerHTML = `${link}<span style="color:var(--muted);text-align:right;">${age}</span><span style="color:var(--text);text-align:right;">${mcap}</span><span style="color:var(--green);text-align:right;">${vol}</span>`;
+    ? `<a href="https://solscan.io/token/${launch.mint}" target="_blank" style="color:var(--cyan);font-weight:700;text-decoration:none;">$${symbol}</a>`
+    : `<span style="color:var(--cyan);font-weight:700;">$${symbol}</span>`;
+  row.innerHTML = `${link}<span style="font-family:var(--font-mono);color:var(--text);text-align:right;">${mcap}</span><span style="font-family:var(--font-mono);color:var(--muted);text-align:right;">${price}</span>${chg}`;
   list.prepend(row);
   while (list.children.length > 40) list.removeChild(list.lastChild);
 }
@@ -269,30 +287,18 @@ function updateStats(trade) {
   const buyPct  = total > 0 ? Math.round(state.stats.buys  / total * 100) : 50;
   const sellPct = 100 - buyPct;
 
-  document.getElementById('stat-trades').textContent  = state.stats.trades.toLocaleString();
-  document.getElementById('stat-buy-vol').textContent  = fmtUSD(state.stats.buyVol);
-  document.getElementById('stat-sell-vol').textContent = fmtUSD(state.stats.sellVol);
-  document.getElementById('stat-buy-pct').textContent  = buyPct + '%';
-  document.getElementById('stat-sell-pct').textContent = sellPct + '%';
-  document.getElementById('stat-whales').textContent   = state.stats.whales;
-  const fill = document.getElementById('ratio-fill');
-  if (fill) fill.style.width = buyPct + '%';
-
-  // Rate (trades per min)
-  if (!state.stats.startTime) state.stats.startTime = Date.now();
-  const mins = (Date.now() - state.stats.startTime) / 60000;
-  const rate = mins > 0 ? Math.round(state.stats.trades / mins) : 0;
-  document.getElementById('stat-rate').textContent = rate + '/min';
-
-  // Mobile stats
-  const mt = document.getElementById('stat-trades-m');
-  const mb = document.getElementById('stat-buy-vol-m');
-  const ms = document.getElementById('stat-sell-vol-m');
-  const mw = document.getElementById('stat-whales-m');
-  if (mt) mt.textContent = state.stats.trades.toLocaleString();
-  if (mb) mb.textContent = fmtUSD(state.stats.buyVol);
-  if (ms) ms.textContent = fmtUSD(state.stats.sellVol);
-  if (mw) mw.textContent = state.stats.whales;
+  const setEl = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val; };
+  setEl('stat-trades',   state.stats.trades.toLocaleString());
+  setEl('stat-buy-vol',  fmtUSD(state.stats.buyVol));
+  setEl('stat-sell-vol', fmtUSD(state.stats.sellVol));
+  setEl('stat-whales',   state.stats.whales);
+  setEl('stat-ratio',    state.stats.buys + '/' + state.stats.sells);
+  setEl('stat-vol',      fmtUSD(state.stats.vol));
+  // Mobile
+  setEl('stat-trades-m',   state.stats.trades.toLocaleString());
+  setEl('stat-buy-vol-m',  fmtUSD(state.stats.buyVol));
+  setEl('stat-sell-vol-m', fmtUSD(state.stats.sellVol));
+  setEl('stat-whales-m',   state.stats.whales);
 }
 
 
@@ -400,11 +406,200 @@ function connectBackend() {
   connect();
 }
 
+// BOTTOM PANELS 
 
-// INITIALIZE
+const BACKEND_API = 'https://bagsflow-production.up.railway.app/api';
+
+// Render session leaderboard (built from live WebSocket trades)
+function renderSessionTraders(list) {
+  const sorted = Object.values(state.leaderboard || {})
+    .sort((a, b) => b.vol - a.vol)
+    .slice(0, 20);
+  list.innerHTML = '';
+  if (!sorted.length) {
+    list.innerHTML = '<div style="padding:16px;font-size:10px;color:var(--muted);text-align:center;">Waiting for live trades…</div>';
+    return;
+  }
+  sorted.forEach((entry, i) => {
+    const row = document.createElement('div');
+    row.className = 'lb-row';
+    const medal = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : (i + 1);
+    row.innerHTML = `
+      <span style="font-family:var(--font-mono);color:var(--gold);">${medal}</span>
+      <span style="font-family:var(--font-mono);color:var(--muted);" title="${entry.wallet}">${entry.wallet.slice(0,4)}···${entry.wallet.slice(-4)}</span>
+      <span style="font-family:var(--font-mono);color:var(--green);">${fmtUSD(entry.vol)}</span>
+      <span style="font-family:var(--font-mono);color:var(--muted);">${entry.trades}</span>
+    `;
+    list.appendChild(row);
+  });
+}
+
+let _traderTf = 'session';
+
+function setTraderTimeframe(tf) {
+  _traderTf = tf;
+  document.querySelectorAll('.tf-btn').forEach(b => {
+    const label = b.textContent.trim();
+    b.classList.toggle('tf-active',
+      (tf === 'session' && label === 'SESSION') ||
+      (tf === '24h'     && label === '24H')     ||
+      (tf === '7d'      && label === '7D')
+    );
+  });
+  loadTopTraders();
+}
+window.setTraderTimeframe = setTraderTimeframe;
+
+async function loadTopTraders() {
+  const list = document.getElementById('traders-list');
+  if (!list) return;
+
+  // SESSION tab — use local leaderboard built from live trade stream
+  if (_traderTf === 'session') {
+    renderSessionTraders(list);
+    return;
+  }
+
+  list.innerHTML = '<div style="padding:16px;font-size:10px;color:var(--muted);text-align:center;">Loading traders…</div>';
+  try {
+    const res  = await fetch(`${BACKEND_API}/analytics/top-traders?timeframe=${_traderTf}&limit=20`);
+    const data = await res.json();
+    const traders = (data.success && data.response) ? data.response : [];
+    list.innerHTML = '';
+    if (!traders.length) {
+      list.innerHTML = '<div style="padding:16px;font-size:10px;color:var(--muted);text-align:center;">No data yet — check BIRDEYE_API_KEY in Railway</div>';
+      return;
+    }
+    traders.forEach((t, i) => {
+      const row = document.createElement('div');
+      row.className = 'lb-row';
+      const medal = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : (i + 1);
+      row.innerHTML = `
+        <span style="font-family:var(--font-mono);color:var(--gold);">${medal}</span>
+        <span style="font-family:var(--font-mono);color:var(--muted);" title="${t.wallet}">${t.wallet.slice(0,4)}···${t.wallet.slice(-4)}</span>
+        <span style="font-family:var(--font-mono);color:var(--green);">${fmtUSD(t.volume)}</span>
+        <span style="font-family:var(--font-mono);color:var(--muted);">${t.trades}</span>
+      `;
+      list.appendChild(row);
+    });
+  } catch(e) {
+    list.innerHTML = `<div style="padding:16px;font-size:10px;color:var(--muted);text-align:center;">Error: ${e.message}</div>`;
+    console.error('loadTopTraders:', e);
+  }
+}
+
+async function loadTopTokens() {
+  const list = document.getElementById('top-tokens-list');
+  if (!list) return;
+  list.innerHTML = '<div style="padding:16px;font-size:10px;color:var(--muted);text-align:center;">Loading tokens…</div>';
+  try {
+    const res  = await fetch(`${BACKEND_API}/analytics/top-tokens?limit=10`);
+    const data = await res.json();
+    const tokens = (data.success && data.response) ? data.response : [];
+    list.innerHTML = '';
+    if (!tokens.length) {
+      list.innerHTML = '<div style="padding:16px;font-size:10px;color:var(--muted);text-align:center;">No token data yet</div>';
+      return;
+    }
+    tokens.forEach((t, i) => {
+      const row = document.createElement('div');
+      row.className = 'top-token-row';
+      row.onclick   = () => window.open(`https://solscan.io/token/${t.mint}`, '_blank');
+      const chgColor = (t.priceChange24h || 0) >= 0 ? 'var(--green)' : 'var(--red)';
+      const chgStr   = t.priceChange24h ? `${t.priceChange24h >= 0 ? '+' : ''}${t.priceChange24h.toFixed(1)}%` : '—';
+      row.innerHTML = `
+        <span style="font-family:var(--font-mono);color:var(--muted);">${i + 1}</span>
+        <span style="font-family:var(--font-mono);color:var(--cyan);font-weight:600;">$${t.symbol || t.mint.slice(0,6)}</span>
+        <span style="font-family:var(--font-mono);color:var(--text);text-align:right;">${fmtUSD(t.marketCap)}</span>
+        <span style="font-family:var(--font-mono);color:var(--muted);text-align:right;">${fmtPrice(t.price)}</span>
+        <span style="font-family:var(--font-mono);color:${chgColor};text-align:right;">${chgStr}</span>
+      `;
+      list.appendChild(row);
+    });
+  } catch(e) {
+    list.innerHTML = `<div style="padding:16px;font-size:10px;color:var(--muted);text-align:center;">Error: ${e.message}</div>`;
+    console.error('loadTopTokens:', e);
+  }
+}
+
+// Track mints already shown so loadLaunches never wipes real-time entries
+const _seenLaunchMints = new Set();
+
+async function loadLaunches() {
+  const list = document.getElementById('launch-list');
+  if (!list) return;
+  try {
+    const res  = await fetch(`${BACKEND_API}/analytics/launches-with-mcap?limit=20`);
+    const data = await res.json();
+    const launches = (data.success && data.response) ? data.response : [];
+    if (!launches.length) {
+      // Only show placeholder if list is completely empty
+      if (!list.children.length) {
+        list.innerHTML = '<div style="padding:16px;font-size:10px;color:var(--muted);text-align:center;">No launches yet</div>';
+      }
+      return;
+    }
+    // Remove placeholder if present
+    const placeholder = list.querySelector('div[style]');
+    if (placeholder) placeholder.remove();
+
+    // Add only new launches (don't wipe existing)
+    launches.forEach(l => {
+      const mint = l.mint || l.symbol;
+      if (!mint || _seenLaunchMints.has(mint)) return;
+      _seenLaunchMints.add(mint);
+
+      const row    = document.createElement('div');
+      row.className = 'launch-row';
+      const symbol = l.symbol || l.name || '???';
+      const mcap   = l.marketCap > 0 ? fmtUSD(l.marketCap) : '—';
+      const price  = l.price     > 0 ? fmtPrice(l.price)   : '—';
+      const chg    = (l.priceChange24h !== undefined && l.priceChange24h !== 0)
+        ? `<span style="color:${l.priceChange24h >= 0 ? 'var(--green)' : 'var(--red)'};">${l.priceChange24h >= 0 ? '+' : ''}${l.priceChange24h.toFixed(1)}%</span>`
+        : `<span style="color:var(--muted);">—</span>`;
+      const link   = l.mint
+        ? `<a href="https://solscan.io/token/${l.mint}" target="_blank" style="color:var(--cyan);font-weight:700;text-decoration:none;">$${symbol}</a>`
+        : `<span style="color:var(--cyan);font-weight:700;">$${symbol}</span>`;
+      row.innerHTML = `${link}<span style="font-family:var(--font-mono);color:var(--text);text-align:right;">${mcap}</span><span style="font-family:var(--font-mono);color:var(--muted);text-align:right;">${price}</span>${chg}`;
+      list.prepend(row);
+    });
+    // Keep max 40 rows
+    while (list.children.length > 40) list.removeChild(list.lastChild);
+  } catch(e) {
+    console.warn('loadLaunches:', e);
+  }
+}
+
+function loadAllPanels() {
+  loadTopTraders();
+  loadTopTokens();
+  loadLaunches();
+}
+
+setInterval(loadAllPanels, 120_000);
+
+// THEME TOGGLE ─
+function toggleTheme() {
+  const isLight = document.body.classList.toggle('light-mode');
+  const btn = document.getElementById('theme-toggle');
+  if (btn) btn.textContent = isLight ? '🌙' : '☀';
+  localStorage.setItem('bagsflow-theme', isLight ? 'light' : 'dark');
+}
+window.toggleTheme = toggleTheme;
+
+function initTheme() {
+  const saved = localStorage.getItem('bagsflow-theme');
+  if (saved === 'light') {
+    document.body.classList.add('light-mode');
+    const btn = document.getElementById('theme-toggle');
+    if (btn) btn.textContent = '🌙';
+  }
+}
 
 document.addEventListener('DOMContentLoaded', () => {
+  initTheme();
   initChart();
   startClock();
   connectBackend();
+  setTimeout(loadAllPanels, 1500);
 });
